@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  --color-bg:          #eef4fb;   /* light blue-grey — security app standard */
+  --color-surface:     #ffffff;
+  --color-border:      #e2e8f0;
+  --color-border-focus:#0891b2;
+  --color-primary:     #0891b2;   /* cyan-600 */
+  --color-primary-h:   #0e7490;   /* cyan-700 */
+  --color-success:     #059669;
+  --color-error:       #dc2626;
+  --color-warning:     #d97706;
+  --color-text-1:      #0f172a;   /* headings */
+  --color-text-2:      #475569;   /* body */
+  --color-text-3:      #94a3b8;   /* hints / muted */
+  --shadow-card:       0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.05);
+  --shadow-card-hover: 0 4px 12px rgba(15,23,42,.12), 0 2px 4px rgba(15,23,42,.06);
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body, #root {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    width: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text-1);
+    font-family: 'Open Sans', 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+
+  /* Card ───────────────────────────────────────────────── */
+  .cyber-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Neon accent text (used in dark header) */
+  .neon-text {
+    @apply text-cyan-400;
+    text-shadow: 0 0 12px rgba(34,211,238,.55);
+  }
+
+  /* Input ─────────────────────────────────────────────── */
+  .cyber-input {
+    width: 100%;
+    min-height: 44px;           /* touch-target ≥44px — WCAG */
+    background: var(--color-surface);
+    border: 1.5px solid #cbd5e1; /* slate-300 — visible on white */
+    border-radius: 8px;
+    padding: 0 16px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--color-text-1);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cyber-input::placeholder { color: var(--color-text-3); }
+  .cyber-input:focus {
+    outline: none;
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 3px rgba(8,145,178,.15);
+  }
+  .cyber-input.error {
+    border-color: var(--color-error);
+    box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+  }
+
+  /* Buttons — min 44px height ─────────────────────────── */
+  .cyber-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 font-semibold rounded-lg
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           active:scale-[.97] cursor-pointer;
+    min-height: 44px;
+    background: var(--color-primary);
+    color: #fff;
+  }
+  .cyber-btn-primary:hover:not(:disabled) { background: var(--color-primary-h); }
+
+  .cyber-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 font-semibold rounded-lg
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           active:scale-[.97] cursor-pointer;
+    min-height: 44px;
+    background: var(--color-surface);
+    color: var(--color-text-2);
+    border: 1.5px solid #cbd5e1;
+  }
+  .cyber-btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .cyber-btn-success {
+    @apply inline-flex items-center justify-center gap-2 px-6 font-semibold rounded-lg
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           active:scale-[.97] cursor-pointer;
+    min-height: 44px;
+    background: var(--color-success);
+    color: #fff;
+  }
+  .cyber-btn-success:hover:not(:disabled) { background: #047857; }
+}

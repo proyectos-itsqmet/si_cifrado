@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Read(//c/Users/Gerald/.agents/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"cybersecurity encryption security tool\" --design-system -p \"Seguridad Informatica\" -f markdown)",
+      "Bash(py scripts/search.py \"cybersecurity encryption security tool\" --design-system -p \"Seguridad Informatica\" -f markdown)",
+      "WebSearch"
+    ]
+  }
+}
