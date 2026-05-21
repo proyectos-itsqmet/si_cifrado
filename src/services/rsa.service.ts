@@ -1,96 +1,76 @@
 /**
- * Servicio RSA (Cifrado Asimétrico)
- * Usa Web Crypto API (SubtleCrypto) para RSA-OAEP.
- * Implementa cifrado híbrido: RSA protege la clave AES-GCM que cifra el archivo.
- * - Clave pública → cifrar
- * - Clave privada → descifrar
+ * RSA con formato OpenPGP — compatible con GPG en Kali Linux.
+ *
+ * Kali — importar claves:  gpg --import public_key.asc
+ *                           gpg --import private_key.asc
+ * Kali — listar claves:    gpg --list-keys
+ * Kali — cifrar:           gpg --recipient "SI Cifrado" --encrypt --output file.gpg file.jpg
+ * Kali — descifrar:        gpg --output file.jpg --decrypt file.gpg
  */
-import { arrayBufferToBase64, base64ToArrayBuffer } from '../utils/file.utils';
+import * as openpgp from 'openpgp';
 
-const RSA_PARAMS: RsaHashedKeyGenParams = {
-  name: 'RSA-OAEP',
-  modulusLength: 2048,
-  publicExponent: new Uint8Array([1, 0, 1]),
-  hash: 'SHA-256',
+const MIME_MAP: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+  pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv',
+  json: 'application/json', xml: 'application/xml',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
+  mp4: 'video/mp4', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+  zip: 'application/zip', rar: 'application/vnd.rar', gz: 'application/gzip',
 };
 
 export const rsaGenerateKeyPair = async (): Promise<{ publicKey: string; privateKey: string }> => {
-  const keyPair = await crypto.subtle.generateKey(RSA_PARAMS, true, ['encrypt', 'decrypt']);
-
-  const publicKeyDer = await crypto.subtle.exportKey('spki', keyPair.publicKey);
-  const privateKeyDer = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-
-  const publicKey = `-----BEGIN PUBLIC KEY-----\n${arrayBufferToBase64(publicKeyDer)
-    .match(/.{1,64}/g)!.join('\n')}\n-----END PUBLIC KEY-----`;
-
-  const privateKey = `-----BEGIN PRIVATE KEY-----\n${arrayBufferToBase64(privateKeyDer)
-    .match(/.{1,64}/g)!.join('\n')}\n-----END PRIVATE KEY-----`;
-
+  const { publicKey, privateKey } = await openpgp.generateKey({
+    type: 'ecc',
+    curve: 'curve25519',
+    userIDs: [{ name: 'SI Cifrado', email: 'sicifrado@local' }],
+  });
   return { publicKey, privateKey };
 };
 
-const importPublicKey = async (pem: string): Promise<CryptoKey> => {
-  const base64 = pem.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\n/g, '');
-  const der = base64ToArrayBuffer(base64);
-  return crypto.subtle.importKey('spki', der, RSA_PARAMS, false, ['encrypt']);
-};
+export const rsaEncryptFile = async (file: File, publicKeyArmored: string): Promise<Blob> => {
+  const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
 
-const importPrivateKey = async (pem: string): Promise<CryptoKey> => {
-  const base64 = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, '');
-  const der = base64ToArrayBuffer(base64);
-  return crypto.subtle.importKey('pkcs8', der, RSA_PARAMS, false, ['decrypt']);
-};
-
-export const rsaEncryptFile = async (file: File, publicKeyPem: string): Promise<Blob> => {
-  const fileBuffer = await file.arrayBuffer();
-
-  // 1. Generar clave AES-GCM aleatoria
-  const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
-  const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
-
-  // 2. Cifrar el archivo con AES-GCM
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encryptedData = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, fileBuffer);
-
-  // 3. Cifrar la clave AES con RSA
-  const publicKey = await importPublicKey(publicKeyPem);
-  const encryptedAesKey = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, rawAesKey);
-
-  const output = JSON.stringify({
-    algorithm: 'RSA-OAEP + AES-GCM',
-    keySize: 2048,
-    timestamp: new Date().toISOString(),
-    fileName: file.name,
-    fileType: file.type,
-    encryptedKey: arrayBufferToBase64(encryptedAesKey),
-    iv: arrayBufferToBase64(iv.buffer),
-    data: arrayBufferToBase64(encryptedData),
+  const message = await openpgp.createMessage({
+    binary: fileBytes,
+    filename: file.name,
   });
 
-  return new Blob([output], { type: 'application/json' });
+  const encrypted = await openpgp.encrypt({
+    message,
+    encryptionKeys: publicKey,
+    format: 'binary',
+  });
+
+  return new Blob([encrypted as Uint8Array], { type: 'application/pgp-encrypted' });
 };
 
 export const rsaDecryptFile = async (
   encFile: File,
-  privateKeyPem: string
+  privateKeyArmored: string,
 ): Promise<{ blob: Blob; name: string }> => {
-  const text = await encFile.text();
-  const parsed = JSON.parse(text);
+  const privateKey = await openpgp.readPrivateKey({ armoredKey: privateKeyArmored });
+  const encBytes = new Uint8Array(await encFile.arrayBuffer());
 
-  const privateKey = await importPrivateKey(privateKeyPem);
+  const message = await openpgp.readMessage({ binaryMessage: encBytes });
 
-  // 1. Descifrar clave AES con RSA
-  const encryptedAesKey = base64ToArrayBuffer(parsed.encryptedKey);
-  const rawAesKey = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, encryptedAesKey);
+  const { data, filename } = await openpgp.decrypt({
+    message,
+    decryptionKeys: privateKey,
+    format: 'binary',
+  });
 
-  // 2. Importar clave AES recuperada
-  const aesKey = await crypto.subtle.importKey('raw', rawAesKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const name = (filename as string | undefined) || encFile.name.replace(/\.gpg$/i, '');
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
 
-  // 3. Descifrar datos del archivo
-  const iv = new Uint8Array(base64ToArrayBuffer(parsed.iv));
-  const encryptedData = base64ToArrayBuffer(parsed.data);
-  const decryptedData = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, encryptedData);
-
-  const blob = new Blob([decryptedData], { type: parsed.fileType || 'application/octet-stream' });
-  return { blob, name: parsed.fileName };
+  return {
+    blob: new Blob([data as Uint8Array], { type: MIME_MAP[ext] ?? 'application/octet-stream' }),
+    name,
+  };
 };

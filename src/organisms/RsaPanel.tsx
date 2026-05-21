@@ -33,7 +33,7 @@ export const RsaPanel = () => {
   const handleDownloadKey = (type: 'public' | 'private') => {
     if (!generatedKeys) return;
     const content = type === 'public' ? generatedKeys.publicKey : generatedKeys.privateKey;
-    downloadFile(new Blob([content], { type: 'text/plain' }), `${type}_key.pem`);
+    downloadFile(new Blob([content], { type: 'text/plain' }), `${type}_key.asc`);
   };
 
   const handleProcess = async () => {
@@ -44,8 +44,8 @@ export const RsaPanel = () => {
       if (mode === 'encrypt') {
         const pubKey = publicKeyFile ? await publicKeyFile.text() : generatedKeys?.publicKey;
         if (!pubKey) { setFeedback({ type: 'error', message: 'Genera o carga una clave pública primero' }); return; }
-        downloadFile(await rsaEncryptFile(file, pubKey), `${file.name}.rsa.enc`);
-        setFeedback({ type: 'success', message: `Cifrado exitoso — descargado como ${file.name}.rsa.enc. Guarda la clave privada.` });
+        downloadFile(await rsaEncryptFile(file, pubKey), `${file.name}.gpg`);
+        setFeedback({ type: 'success', message: `Cifrado exitoso — descargado como ${file.name}.gpg. Guarda la clave privada.` });
         setFile(null);
       } else {
         if (!privateKeyFile) { setFeedback({ type: 'error', message: 'Carga tu clave privada (.pem)' }); return; }
@@ -68,7 +68,7 @@ export const RsaPanel = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-base font-bold" style={{ color: 'var(--color-text-1)' }}>Cifrado Asimétrico</h2>
-            <Badge variant="blue">RSA-2048</Badge>
+            <Badge variant="blue">ECC Curve25519</Badge>
           </div>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-3)' }}>
             Clave pública cifra · Clave privada descifra · Cifrado híbrido RSA + AES-GCM
@@ -144,8 +144,8 @@ export const RsaPanel = () => {
                   <div className="flex-1 h-px bg-slate-200" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold" style={{ color: 'var(--color-text-2)' }}>Clave pública (.pem)</span>
-                  <FileDropzone file={publicKeyFile} onFileSelect={setPublicKeyFile} onClear={() => setPublicKeyFile(null)} accept=".pem,.txt" label="Arrastra la clave pública" />
+                  <span className="text-xs font-semibold" style={{ color: 'var(--color-text-2)' }}>Clave pública (.asc)</span>
+                  <FileDropzone file={publicKeyFile} onFileSelect={setPublicKeyFile} onClear={() => setPublicKeyFile(null)} accept=".asc,.pem,.txt" label="Arrastra la clave pública (.asc)" />
                 </div>
               </>
             )}
@@ -168,9 +168,9 @@ export const RsaPanel = () => {
       {mode === 'decrypt' && (
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold" style={{ color: 'var(--color-text-2)' }}>
-            Clave privada (.pem) <span className="text-red-600">*</span>
+            Clave privada (.asc) <span className="text-red-600">*</span>
           </span>
-          <FileDropzone file={privateKeyFile} onFileSelect={setPrivateKeyFile} onClear={() => setPrivateKeyFile(null)} accept=".pem,.txt" label="Arrastra tu clave privada" />
+          <FileDropzone file={privateKeyFile} onFileSelect={setPrivateKeyFile} onClear={() => setPrivateKeyFile(null)} accept=".asc,.pem,.txt" label="Arrastra tu clave privada (.asc)" />
         </div>
       )}
 
@@ -182,8 +182,8 @@ export const RsaPanel = () => {
           file={file}
           onFileSelect={setFile}
           onClear={() => setFile(null)}
-          accept={mode === 'decrypt' ? '.enc,.json' : undefined}
-          label={mode === 'decrypt' ? 'Arrastra el archivo .rsa.enc' : 'Arrastra cualquier archivo'}
+          accept={mode === 'decrypt' ? '.gpg,.enc' : undefined}
+          label={mode === 'decrypt' ? 'Arrastra el archivo .gpg' : 'Arrastra cualquier archivo'}
         />
       </div>
 
