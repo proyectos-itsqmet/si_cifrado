@@ -75,13 +75,18 @@ export const aesDecryptFile = async (
   const originalName = encFile.name.replace(/\.aes\.enc$/i, '');
   const ext = originalName.split('.').pop()?.toLowerCase() ?? '';
   const mimeMap: Record<string, string> = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
-    webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf',
-    txt: 'text/plain', csv: 'text/csv', html: 'text/html', json: 'application/json',
-    mp4: 'video/mp4', mp3: 'audio/mpeg', wav: 'audio/wav',
-    zip: 'application/zip',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv',
+    json: 'application/json', xml: 'application/xml',
+    doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac',
+    mp4: 'video/mp4', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+    zip: 'application/zip', rar: 'application/vnd.rar', gz: 'application/gzip',
   };
 
   return {
