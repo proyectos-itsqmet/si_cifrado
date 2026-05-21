@@ -1,45 +1,91 @@
 /**
- * Servicio AES (Cifrado Simétrico)
- * Usa la librería crypto-js para cifrar/descifrar archivos con AES-256.
- * La misma contraseña sirve para cifrar y descifrar.
+ * AES-256-CBC con formato OpenSSL binario ("Salted__" + 8B salt + ciphertext).
+ * Usa SHA-256 para key derivation (default de OpenSSL 1.1.0+ / 3.x en Kali).
+ *
+ * Kali Linux — cifrar:   openssl enc -aes-256-cbc -in file -out file.aes.enc -pass pass:CLAVE
+ * Kali Linux — descifrar: openssl enc -aes-256-cbc -d -in file.aes.enc -out file -pass pass:CLAVE
  */
-import CryptoJS from 'crypto-js';
-import { arrayBufferToBase64, base64ToArrayBuffer } from '../utils/file.utils';
+
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a); out.set(b, a.length);
+  return out;
+}
+
+// EVP_BytesToKey con SHA-256 — igual al default de OpenSSL 1.1.0+
+// AES-256-CBC necesita 32B de clave + 16B de IV = 48B en total
+// SHA-256 produce 32B → D0 = clave completa, D1[0:16] = IV
+async function evpBytesToKey(
+  password: Uint8Array,
+  salt: Uint8Array,
+): Promise<{ key: Uint8Array<ArrayBuffer>; iv: Uint8Array<ArrayBuffer> }> {
+  const ps = concat(password, salt);
+  const d0 = new Uint8Array(await crypto.subtle.digest('SHA-256', ps));
+  const d1 = new Uint8Array(await crypto.subtle.digest('SHA-256', concat(d0, ps)));
+  return { key: d0, iv: d1.slice(0, 16) };
+}
+
+const MAGIC = new TextEncoder().encode('Salted__');
 
 export const aesEncryptFile = async (file: File, password: string): Promise<Blob> => {
-  const arrayBuffer = await file.arrayBuffer();
-  const base64Data = arrayBufferToBase64(arrayBuffer);
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  const passwordBytes = new TextEncoder().encode(password);
+  const salt = crypto.getRandomValues(new Uint8Array(8));
 
-  const metadata = JSON.stringify({ name: file.name, type: file.type });
-  const payload = JSON.stringify({ meta: metadata, data: base64Data });
+  const { key, iv } = await evpBytesToKey(passwordBytes, salt);
+  const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'AES-CBC' }, false, ['encrypt']);
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, cryptoKey, fileBytes),
+  );
 
-  const encrypted = CryptoJS.AES.encrypt(payload, password).toString();
+  // Formato OpenSSL: "Salted__" (8B) + salt (8B) + ciphertext
+  const output = new Uint8Array(16 + ciphertext.length);
+  output.set(MAGIC, 0);
+  output.set(salt, 8);
+  output.set(ciphertext, 16);
 
-  const output = JSON.stringify({
-    algorithm: 'AES-256',
-    mode: 'CBC',
-    timestamp: new Date().toISOString(),
-    encrypted,
-  });
-
-  return new Blob([output], { type: 'application/json' });
+  return new Blob([output], { type: 'application/octet-stream' });
 };
 
-export const aesDecryptFile = async (encFile: File, password: string): Promise<{ blob: Blob; name: string }> => {
-  const text = await encFile.text();
-  const parsed = JSON.parse(text);
+export const aesDecryptFile = async (
+  encFile: File,
+  password: string,
+): Promise<{ blob: Blob; name: string }> => {
+  const fileBuf = await encFile.arrayBuffer();
+  const fileBytes = new Uint8Array(fileBuf);
 
-  const bytes = CryptoJS.AES.decrypt(parsed.encrypted, password);
-  const payloadStr = bytes.toString(CryptoJS.enc.Utf8);
+  if (fileBytes.length < 16 || new TextDecoder().decode(fileBytes.slice(0, 8)) !== 'Salted__') {
+    throw new Error('Formato no compatible: el archivo no tiene cabecera OpenSSL (Salted__)');
+  }
 
-  if (!payloadStr) throw new Error('Contraseña incorrecta o archivo corrupto');
+  const salt = fileBytes.slice(8, 16);
+  const ciphertextBuf = fileBuf.slice(16);
 
-  const payload = JSON.parse(payloadStr);
-  const { meta, data } = payload;
-  const { name, type } = JSON.parse(meta);
+  const passwordBytes = new TextEncoder().encode(password);
+  const { key, iv } = await evpBytesToKey(passwordBytes, salt);
+  const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'AES-CBC' }, false, ['decrypt']);
 
-  const arrayBuffer = base64ToArrayBuffer(data);
-  const blob = new Blob([arrayBuffer], { type });
+  let plaintext: ArrayBuffer;
+  try {
+    plaintext = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, cryptoKey, ciphertextBuf);
+  } catch {
+    throw new Error('Contraseña incorrecta o archivo corrupto');
+  }
 
-  return { blob, name };
+  const originalName = encFile.name.replace(/\.aes\.enc$/i, '');
+  const ext = originalName.split('.').pop()?.toLowerCase() ?? '';
+  const mimeMap: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf',
+    txt: 'text/plain', csv: 'text/csv', html: 'text/html', json: 'application/json',
+    mp4: 'video/mp4', mp3: 'audio/mpeg', wav: 'audio/wav',
+    zip: 'application/zip',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  return {
+    blob: new Blob([plaintext], { type: mimeMap[ext] ?? 'application/octet-stream' }),
+    name: originalName,
+  };
 };

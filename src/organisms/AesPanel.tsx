@@ -96,7 +96,7 @@ export const AesPanel = () => {
           file={file}
           onFileSelect={setFile}
           onClear={() => setFile(null)}
-          accept={mode === 'decrypt' ? '.enc,.json' : undefined}
+          accept={mode === 'decrypt' ? '.enc' : undefined}
           label={mode === 'decrypt' ? 'Arrastra el archivo .aes.enc' : 'Arrastra cualquier archivo'}
         />
       </div>
